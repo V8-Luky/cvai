@@ -1,5 +1,5 @@
 # GANerate your dreams
-In this project, we're experimenting with CycleGAN to map real-world images into the aesthetic of Studio Ghibli films.
+In this project, we're experimenting with CycleGANs to map images from one style to another style. The goal is to prepare a generic framework to make it easy to map any to styles to each other. That implementation should then be tested by converting real-world images into the aesthetic of Studio Ghibli films.
 
 ## Team
 - David Schurtenberger
