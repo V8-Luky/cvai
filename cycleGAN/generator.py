@@ -3,16 +3,30 @@ import torch.nn as nn
 
 
 class ResidualGenerator(nn.Module):
+    """
+    Residual-based generator model for image-to-image translation tasks.
+
+    This model is composed of:
+    - An initial convolutional layer to expand input channels.
+    - A set of downsampling layers.
+    - A sequence of residual blocks.
+    - A set of upsampling layers.
+    - A final convolution to restore original input dimensions.
+
+    :param in_channels: Number of input channels (e.g., 3 for RGB).
+    :param channels: Base number of channels used in convolutions.
+    :param n_blocks: Number of residual blocks used in the network.
+    :param sampling_steps: Number of downsampling and upsampling layers.
+    :param padding_mode: Padding mode used in convolutional layers.
+    """
     def __init__(self, in_channels=3, channels=64, n_blocks=9, sampling_steps=3, padding_mode='reflect'):
         super().__init__()
-        # To 64 channels
         self.model = nn.Sequential(
             nn.Conv2d(in_channels, channels, kernel_size=7, padding=3, padding_mode=padding_mode),
             nn.InstanceNorm2d(channels),
             nn.ReLU(inplace=True),
         )
 
-        # Downsampling
         self.model.extend(nn.Sequential(
             *[ConvBlock(
                 channels * 2 ** m,
@@ -22,13 +36,11 @@ class ResidualGenerator(nn.Module):
             ) for m in range(sampling_steps)]
         ))
 
-        # Residual connections
         self.model.extend(nn.Sequential(
             *[ResidualBlock(channels * 2 ** sampling_steps, padding_mode=padding_mode)
               for _ in range(n_blocks)]
         ))
 
-        # Upsampling
         self.model.extend(nn.Sequential(
             *[ConvBlock(
                 channels * 2 ** m,
@@ -38,17 +50,28 @@ class ResidualGenerator(nn.Module):
             ) for m in range(sampling_steps, 0, -1)]
         ))
 
-        # To input channels
         self.model.extend(nn.Sequential(
             nn.Conv2d(channels, in_channels, kernel_size=7, padding=3, padding_mode=padding_mode),
             nn.Tanh()
         ))
 
     def forward(self, input):
+        """
+        Performs the forward pass through the generator.
+
+        :param input: Input tensor of shape (B, C, H, W).
+        :return: Output tensor of the same shape as the input.
+        """
         return self.model(input)
 
 
 class ResidualBlock(nn.Module):
+    """
+    A standard residual block consisting of two convolutional layers.
+
+    :param dim: Number of input and output channels.
+    :param padding_mode: Padding mode used in the convolution layers.
+    """
     def __init__(self, dim, padding_mode):
         super().__init__()
         self.block = nn.Sequential(
@@ -58,10 +81,24 @@ class ResidualBlock(nn.Module):
         )
 
     def forward(self, x):
+        """
+        Applies the residual block to the input tensor.
+
+        :param x: Input tensor.
+        :return: Output tensor with residual connection applied.
+        """
         return x + self.block(x)
 
 
 class ConvBlock(nn.Module):
+    """
+    A convolutional block used for downsampling or upsampling operations.
+
+    :param in_dim: Number of input channels.
+    :param out_dim: Number of output channels.
+    :param padding_mode: Padding mode used in the convolution layer.
+    :param down: If True, performs downsampling using Conv2d; otherwise, performs upsampling using ConvTranspose2d.
+    """
     def __init__(self, in_dim, out_dim, padding_mode, down=True):
         super().__init__()
         self.block = nn.Sequential(
@@ -73,10 +110,26 @@ class ConvBlock(nn.Module):
         )
 
     def forward(self, x):
+        """
+        Applies the convolutional block transformation to the input tensor.
+
+        :param x: Input tensor.
+        :return: Transformed output tensor.
+        """
         return self.block(x)
 
 
 class UnetGenerator(nn.Module):
+    """
+    U-Net style generator architecture for image generation or translation tasks.
+
+    This class constructs a symmetrical encoder-decoder network with skip connections,
+    commonly used in tasks like image segmentation and style transfer.
+
+    :param in_channels: Number of input channels (e.g., 3 for RGB images).
+    :param features: Base number of feature maps in the network.
+    :param sampling_steps: Number of downsampling/upsampling steps.
+    """
     def __init__(self, in_channels=3, features=64, sampling_steps=5):
         super().__init__()
         block = InnermostUnetBlock(features * 8, features * 8)
@@ -88,10 +141,23 @@ class UnetGenerator(nn.Module):
         self.model = OutermostUnetBlock(in_channels, features, submodule=block)
 
     def forward(self, input):
+        """
+        Defines the forward pass of the generator.
+
+        :param input: Input tensor of shape (B, C, H, W).
+        :return: Output tensor of the same shape as input.
+        """
         return self.model(input)
 
 
 class OutermostUnetBlock(nn.Module):
+    """
+    The outermost block of the U-Net, handling input and output layers.
+
+    :param dim_outer: Number of input and output channels.
+    :param dim_inner: Number of internal feature channels.
+    :param submodule: Inner U-Net block to nest within this layer.
+    """
     def __init__(self, dim_outer, dim_inner, submodule: nn.Module):
         super().__init__()
 
@@ -104,10 +170,22 @@ class OutermostUnetBlock(nn.Module):
         )
 
     def forward(self, x):
+        """
+        Forward pass through the outermost U-Net block.
+
+        :param x: Input tensor.
+        :return: Output tensor.
+        """
         return self.model(x)
 
 
 class InnermostUnetBlock(nn.Module):
+    """
+    The innermost (deepest) block of the U-Net, with no nested submodules.
+
+    :param dim_outer: Input and output channel size.
+    :param dim_inner: Hidden channel size used for processing.
+    """
     def __init__(self, dim_outer, dim_inner):
         super().__init__()
 
@@ -120,10 +198,23 @@ class InnermostUnetBlock(nn.Module):
         )
 
     def forward(self, x):
+        """
+        Forward pass through the innermost U-Net block.
+
+        :param x: Input tensor.
+        :return: Concatenated input and output tensor.
+        """
         return torch.cat([x, self.model(x)], 1)
 
 
 class UnetBlock(nn.Module):
+    """
+    A recursive U-Net block containing nested submodules.
+
+    :param dim_outer: Number of input and output channels.
+    :param dim_inner: Number of internal feature channels.
+    :param submodule: A nested UnetBlock or InnermostUnetBlock.
+    """
     def __init__(self, dim_outer, dim_inner, submodule: nn.Module):
         super().__init__()
 
@@ -138,4 +229,10 @@ class UnetBlock(nn.Module):
         )
 
     def forward(self, x):
+        """
+        Forward pass through a U-Net block with skip connection.
+
+        :param x: Input tensor.
+        :return: Concatenated input and processed tensor.
+        """
         return torch.cat([x, self.model(x)], 1)
