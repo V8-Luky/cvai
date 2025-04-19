@@ -1,7 +1,10 @@
+from data.dataset import UnpairedImageDataset
+from PIL import Image
+import numpy as np
+from data.datamodule import UnpairedDataModule
+from pathlib import Path
+
 def test_unpaired_dataset(tmp_path):
-    from data.dataset import UnpairedImageDataset
-    from PIL import Image
-    import numpy as np
     domain_a = tmp_path / "domain_a"
     domain_b = tmp_path / "domain_b"
     domain_a.mkdir()
@@ -19,9 +22,6 @@ def test_unpaired_dataset(tmp_path):
 
 
 def test_datamodule_batch():
-    from data.datamodule import UnpairedDataModule
-    from pathlib import Path
-
     path = Path("/home/jovyan/.cache/kagglehub/datasets/shubham1921/real-to-ghibli-image-dataset-5k-paired-images/versions/1/dataset")
     dm = UnpairedDataModule(domain_a_dir=path / "trainA", domain_b_dir=path / "trainB_ghibli", batch_size=2, num_workers=0)
     dm.setup()

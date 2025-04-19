@@ -1,6 +1,7 @@
 from pathlib import Path
 from PIL import Image
 import random
+import torch
 from torch.utils.data import Dataset
 import torchvision.transforms as T
 
@@ -33,8 +34,8 @@ class UnpairedImageDataset(Dataset):
 
     def __getitem__(self, idx):
         a_img_path = self.domain_a_paths[idx % len(self.domain_a_paths)]
-        b_img_path = random.choice(self.domain_b_paths)
-
+        b_img_path = self.domain_b_paths[torch.randint(len(self.domain_b_paths), ()).item()]
+    
         a_img = Image.open(a_img_path).convert("RGB")
         b_img = Image.open(b_img_path).convert("RGB")
 
