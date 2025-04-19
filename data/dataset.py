@@ -3,7 +3,7 @@ from PIL import Image
 import random
 import torch
 from torch.utils.data import Dataset
-import torchvision.transforms as T
+import torchvision.transforms.v2 as T
 
 
 class UnpairedImageDataset(Dataset):
