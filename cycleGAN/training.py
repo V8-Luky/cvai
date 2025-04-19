@@ -1,3 +1,11 @@
+"""
+This module provides training and hyperparameter tuning functionality for CycleGAN models.
+
+It contains two main classes:
+- Training: For running a single training session with a CycleGAN model
+- Sweep: For conducting hyperparameter sweeps using Weights & Biases
+"""
+
 import lightning as L
 import wandb
 
@@ -14,6 +22,19 @@ SEED = 42
 
 
 class Training:
+    """
+    Handles the training process for a CycleGAN model.
+
+    This class wraps the Lightning Trainer with appropriate configurations
+    and callbacks for training CycleGAN models.
+
+    Attributes:
+        name (str): Name of the training run
+        model (TrainableCycleGAN): The CycleGAN model to train
+        datamodule (L.LightningDataModule): Data module providing the training data
+        callbacks (list[L.Callback]): List of Lightning callbacks for the training process
+    """
+
     def __init__(
         self,
         name: str,
@@ -21,6 +42,16 @@ class Training:
         datamodule: L.LightningDataModule,
         callbacks: list[L.Callback] = None,
     ):
+        """
+        Initialize a Training instance.
+
+        Args:
+            name (str): Name of the training run
+            model (TrainableCycleGAN): The CycleGAN model to train
+            datamodule (L.LightningDataModule): Data module providing the training data
+            callbacks (list[L.Callback], optional): List of Lightning callbacks.
+                If None, default callbacks will be used.
+        """
         self.name = name
         self.model = model
         self.datamodule = datamodule
@@ -29,6 +60,12 @@ class Training:
         )
 
     def __call__(self):
+        """
+        Execute the training process.
+
+        Sets up a WandbLogger, configures a Lightning Trainer with the specified
+        parameters, and runs the training process.
+        """
         logger = WandbLogger(name=self.name, log_model=True)
 
         trainer = L.Trainer(
@@ -45,6 +82,13 @@ class Training:
         wandb.finish()
 
     def get_default_callbacks(self):
+        """
+        Create default callbacks for the training process.
+
+        Returns:
+            list[L.Callback]: A list of default callbacks including learning rate monitoring,
+                model checkpointing, and early stopping based on validation and training loss.
+        """
         return [
             LearningRateMonitor(
                 logging_interval="step", log_momentum=True, log_weight_decay=True
@@ -64,6 +108,22 @@ class Training:
 
 
 class Sweep:
+    """
+    Handles hyperparameter sweeps for CycleGAN models using Weights & Biases.
+
+    This class configures and executes hyperparameter searches to find optimal
+    training configurations for CycleGAN models.
+
+    Attributes:
+        run_name_prefix (str): Prefix for naming individual sweep runs
+        project (str): W&B project name
+        entity (str): W&B entity (username or organization)
+        model_config (CycleGANConfig): Base configuration for the CycleGAN model
+        sweep_config (dict): W&B sweep configuration defining the hyperparameter search space
+        datamodule (L.LightningDataModule): Data module providing the training data
+        count (int): Maximum number of runs to execute
+        """
+
     def __init__(
         self,
         run_name_prefix: str,
