@@ -56,24 +56,23 @@ class CycleGAN(nn.Module):
         self.loss_cycle = nn.L1Loss()
         self.loss_identity = nn.L1Loss()
 
-        self.real_a: torch.Tensor | None = None
-        self.fake_a: torch.Tensor | None = None
-        self.real_b: torch.Tensor | None = None
-        self.fake_b: torch.Tensor | None = None
-
-    def forward(self, a: torch.Tensor, b: torch.Tensor):
+    def forward(self, a: torch.Tensor, b: torch.Tensor) -> tuple[torch.Tensor, torch.Tensor]:
         """
         Runs the forward pass for CycleGAN using inputs from domain A and B.
 
         :param a: Real images from domain A.
         :param b: Real images from domain B.
+        :return: Tuple of tensors of the fake images (fake_a, fake_b).
         """
-        self.real_a = a
-        self.real_b = b
-        self.fake_a = self.generator_b_to_a(b)
-        self.fake_b = self.generator_a_to_b(a)
+        return self.generator_b_to_a(b), self.generator_a_to_b(a)
 
-    def generator_loss(self) -> torch.Tensor:
+    def generator_loss(
+            self,
+            real_a: torch.Tensor,
+            real_b: torch.Tensor,
+            fake_a: torch.Tensor,
+            fake_b: torch.Tensor
+    ) -> torch.Tensor:
         """
         Computes the total generator loss including adversarial, cycle consistency,
         and optional identity loss.
@@ -84,40 +83,46 @@ class CycleGAN(nn.Module):
         lambda_a = self.config.lambda_a
         lambda_b = self.config.lambda_b
 
-        disc_a = self.discriminator_a(self.fake_a)
-        disc_b = self.discriminator_b(self.fake_b)
+        disc_a = self.discriminator_a(fake_a)
+        disc_b = self.discriminator_b(fake_b)
         loss_gen_a = self.loss_gan(disc_a, torch.ones_like(disc_a))
         loss_gen_b = self.loss_gan(disc_b, torch.ones_like(disc_b))
 
-        rec_a = self.generator_b_to_a(self.fake_b)
-        rec_b = self.generator_a_to_b(self.fake_a)
-        loss_cycle_a = self.loss_cycle(rec_a, self.real_a) * lambda_a
-        loss_cycle_b = self.loss_cycle(rec_b, self.real_b) * lambda_b
+        rec_a = self.generator_b_to_a(fake_b)
+        rec_b = self.generator_a_to_b(fake_a)
+        loss_cycle_a = self.loss_cycle(rec_a, real_a) * lambda_a
+        loss_cycle_b = self.loss_cycle(rec_b, real_b) * lambda_b
 
         if lambda_idt > 0.0:
-            loss_idt_a = self.loss_identity(self.generator_b_to_a(self.real_a), self.real_a) * lambda_idt * lambda_a
-            loss_idt_b = self.loss_identity(self.generator_a_to_b(self.real_b), self.real_b) * lambda_idt * lambda_b
+            loss_idt_a = self.loss_identity(self.generator_b_to_a(real_a), real_a) * lambda_idt * lambda_a
+            loss_idt_b = self.loss_identity(self.generator_a_to_b(real_b), real_b) * lambda_idt * lambda_b
         else:
             loss_idt_a = 0
             loss_idt_b = 0
 
         return loss_gen_a + loss_gen_b + loss_cycle_a + loss_cycle_b + loss_idt_a + loss_idt_b
 
-    def discriminator_loss(self) -> torch.Tensor:
+    def discriminator_loss(
+            self,
+            real_a: torch.Tensor,
+            real_b: torch.Tensor,
+            fake_a: torch.Tensor,
+            fake_b: torch.Tensor
+    ) -> torch.Tensor:
         """
         Computes the total discriminator loss using real and fake samples
         for both domain A and B.
 
         :return: Total discriminator loss.
         """
-        disc_real_a = self.discriminator_a(self.real_a)
-        disc_fake_a = self.discriminator_a(self.fake_a.detach())
+        disc_real_a = self.discriminator_a(real_a)
+        disc_fake_a = self.discriminator_a(fake_a.detach())
         loss_disc_real_a = self.loss_gan(disc_real_a, torch.ones_like(disc_real_a))
         loss_disc_fake_a = self.loss_gan(disc_fake_a, torch.zeros_like(disc_fake_a))
         loss_disc_a = loss_disc_real_a + loss_disc_fake_a
 
-        disc_real_b = self.discriminator_b(self.real_b)
-        disc_fake_b = self.discriminator_b(self.fake_b.detach())
+        disc_real_b = self.discriminator_b(real_b)
+        disc_fake_b = self.discriminator_b(fake_b.detach())
         loss_disc_real_b = self.loss_gan(disc_real_b, torch.ones_like(disc_real_b))
         loss_disc_fake_b = self.loss_gan(disc_fake_b, torch.zeros_like(disc_fake_b))
         loss_disc_b = loss_disc_real_b + loss_disc_fake_b

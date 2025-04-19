@@ -9,12 +9,14 @@ class PatchBlock(nn.Module):
 
     :param in_channels: Number of input channels.
     :param out_channels: Number of output channels.
+    :param kernel_size: Kernel size (default is 4).
     :param stride: Stride of the convolution (default is 2).
+    :param padding: Padding value (default is 1).
     """
-    def __init__(self, in_channels, out_channels, stride=2):
+    def __init__(self, in_channels, out_channels, kernel_size=4, stride=2, padding=1):
         super().__init__()
         self.model = nn.Sequential(
-            nn.Conv2d(in_channels, out_channels, kernel_size=4, stride=stride, padding=1),
+            nn.Conv2d(in_channels, out_channels, kernel_size=kernel_size, stride=stride, padding=padding),
             nn.InstanceNorm2d(out_channels),
             nn.LeakyReLU(0.2, inplace=True)
         )
@@ -73,18 +75,22 @@ class PixelGanDiscriminator(nn.Module):
 
     :param in_channels: Number of input image channels.
     :param channels: Base number of channels.
+    :param n_layers: Number of PatchBlock layers (controls feature depth).
     """
-    def __init__(self, in_channels=3, channels=64):
+    def __init__(self, in_channels=3, channels=64, n_layers=1):
         super().__init__()
 
         self.model = nn.Sequential(
             nn.Conv2d(in_channels, channels, kernel_size=1, stride=1, padding=0),
-            nn.LeakyReLU(0.2, inplace=True),
-            nn.Conv2d(channels, channels * 2, kernel_size=1, stride=1, padding=0),
-            nn.InstanceNorm2d(channels * 2),
-            nn.LeakyReLU(0.2, inplace=True),
-            nn.Conv2d(channels * 2, 1, kernel_size=1, stride=1, padding=0)
+            nn.LeakyReLU(0.2, inplace=True)
         )
+
+        self.model.extend(nn.Sequential(
+            *[PatchBlock(channels * 2 ** m, channels * 2 ** (m + 1), kernel_size=1, stride=1, padding=0)
+              for m in range(n_layers)]
+        ))
+
+        self.model.append(nn.Conv2d(channels * 2 ** n_layers, 1, kernel_size=1, stride=1, padding=0))
 
     def forward(self, input):
         """
