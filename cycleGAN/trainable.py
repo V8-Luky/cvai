@@ -40,7 +40,10 @@ class TrainableCycleGAN(L.LightningModule):
         config = dict()
         config["model_config"] = model_config
         config["train_config"] = train_config
+        config["model_config_detailed"] = vars(model_config)
+        config["train_config_detailed"] = vars(train_config)
         self.save_hyperparameters(config)
+        
 
         self.model = None
 

@@ -19,9 +19,6 @@ class CycleGANConfig:
     :param disc_type: Discriminator architecture to use (PatchGan or PixelGan).
     :param disc_channels: Base number of channels for discriminator.
     :param disc_kwargs: Additional keyword arguments for discriminator initialization.
-    :param lambda_a: Weight for cycle loss from A to B to A.
-    :param lambda_b: Weight for cycle loss from B to A to B.
-    :param lambda_identity: Weight for identity loss.
     """
 
     gen_type: Type[ResidualGenerator] | Type[UnetGenerator] = ResidualGenerator

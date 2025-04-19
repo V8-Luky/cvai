@@ -13,3 +13,4 @@ from .discriminator import PatchGanDiscriminator, PixelGanDiscriminator
 from .model import CycleGANConfig, CycleGAN
 from .trainable import TrainableCycleGAN, TrainConfig
 from .training import Training, Sweep
+from .evaluation import Evaluation
