@@ -11,3 +11,6 @@ An easy walkthrough on a CycleGAN implementation is presented on YouTube by Alad
 from .generator import ResidualGenerator, UnetGenerator
 from .discriminator import PatchGanDiscriminator, PixelGanDiscriminator
 from .model import CycleGANConfig, CycleGAN
+from .trainable import TrainableCycleGAN, TrainConfig
+from .training import Training, Sweep
+from .evaluation import Evaluation
