@@ -164,8 +164,8 @@ class TrainableCycleGAN(L.LightningModule):
         self.log(f"{stage}_loss_disc_a", loss_disc_a)
         self.log(f"{stage}_loss_disc_b", loss_disc_b)
         self.log(f"{stage}_loss_generator", generator_loss)
-        self.log(f"{stage}_loss_discriminator", generator_loss)
-        self.log(f"{stage}_loss", generator_loss)
+        self.log(f"{stage}_loss_discriminator", discriminator_loss)
+        self.log(f"{stage}_loss", loss)
 
         return fake_a, fake_b, loss
 
