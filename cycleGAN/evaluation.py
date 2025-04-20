@@ -35,15 +35,8 @@ class Evaluation:
         artifact_dir = artifact.download()
 
         checkpoint = torch.load(artifact_dir + "/model.ckpt")
-        original_run = artifact.logged_by()
 
-        config = original_run.config
-        model_config = self.get_model_config(config)
-
-        model = TrainableCycleGAN(model_config, TrainConfig())
-
-        model.load_state_dict(checkpoint["state_dict"])
-
+        model = TrainableCycleGAN.load_from_checkpoint(checkpoint)
         logger = WandbLogger(name=self.name, log_model=True)
 
         trainer = L.Trainer(
@@ -60,16 +53,8 @@ class Evaluation:
     def get_model_config(self, config: dict) -> CycleGANConfig:
         config = config["model_config_detailed"]
         return CycleGANConfig(
-            gen_type=(
-                ResidualGenerator
-                if "cycleGAN.generator.ResidualGenerator" == config["gen_type"]
-                else UnetGenerator
-            ),
+            gen_type=ResidualGenerator if "cycleGAN.generator.ResidualGenerator" == config["gen_type"]else UnetGenerator,
             gen_channels=config["gen_channels"],
-            disc_type=(
-                PatchGanDiscriminator
-                if "cycleGAN.discriminator.PatchGanDiscriminator" == config["disc_type"]
-                else PixelGanDiscriminator
-            ),
+            disc_type=PatchGanDiscriminator if "cycleGAN.discriminator.PatchGanDiscriminator" == config["disc_type"] else PixelGanDiscriminator,
             disc_channels=config["disc_channels"],
         )

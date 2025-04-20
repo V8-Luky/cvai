@@ -25,9 +25,7 @@ class CycleGANConfig:
     gen_channels: int = 64
     gen_kwargs: dict = field(default_factory=dict)
 
-    disc_type: Type[PatchGanDiscriminator] | Type[PixelGanDiscriminator] = (
-        PatchGanDiscriminator
-    )
+    disc_type: Type[PatchGanDiscriminator] | Type[PixelGanDiscriminator] = PatchGanDiscriminator
     disc_channels: int = 64
     disc_kwargs: dict = field(default_factory=dict)
 
