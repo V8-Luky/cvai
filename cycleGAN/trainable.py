@@ -122,32 +122,9 @@ class TrainableCycleGAN(L.LightningModule):
 
     def configure_optimizers(self):
 
-        optim_generator = torch.optim.Adam(
-            self.model.get_generator_params(),
-            lr=self.hparams.train_config.learning_rate,
-            betas=(0.5, 0.999),
-        )
-
-        optim_discriminator_a = torch.optim.Adam(
-            self.model.get_discriminator_a_params(),
-            lr=self.hparams.train_config.learning_rate,
-            betas=(0.5, 0.999),
-        )
-
-        optim_discriminator_b = torch.optim.Adam(
-            self.model.get_discriminator_b_params(),
-            lr=self.hparams.train_config.learning_rate,
-            betas=(0.5, 0.999),
-        )
-
-        optimizers = [
-            optim_generator,
-            optim_discriminator_a,
-            optim_discriminator_b,
-        ]
-
-        lr_schedulers = [torch.optim.lr_scheduler.LambdaLR(optim, lr_lambda=LambdaLR(
-            self.hparams.train_config.max_epochs, self.hparams.train_config.start_epoch, self.hparams.train_config.decay_epoch)) for optim in optimizers]
+        param_groups = (self.model.get_generator_params(), self.model.get_discriminator_a_params(), self.model.get_discriminator_b_params())
+        optimizers = [torch.optim.Adam(params, lr=self.hparams.train_config.learning_rate, betas=(0.5, 0.999)) for params in param_groups]
+        lr_schedulers = [torch.optim.lr_scheduler.LambdaLR(optim, lr_lambda=self._new_lr_lambda()) for optim in optimizers]
 
         return optimizers, lr_schedulers
 
@@ -259,4 +236,14 @@ class TrainableCycleGAN(L.LightningModule):
             loss_cycle_b,
             loss_idt_a,
             loss_idt_b,
+        )
+
+    def _new_lr_lambda(self) -> LambdaLR:
+        """
+        Returns a new instance of the learning rate scheduler.
+        """
+        return LambdaLR(
+            self.hparams.train_config.max_epochs,
+            self.hparams.train_config.start_epoch,
+            self.hparams.train_config.decay_epoch,
         )
