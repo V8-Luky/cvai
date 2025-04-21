@@ -122,7 +122,7 @@ class Sweep:
         sweep_config (dict): W&B sweep configuration defining the hyperparameter search space
         datamodule (L.LightningDataModule): Data module providing the training data
         count (int): Maximum number of runs to execute
-        """
+    """
 
     def __init__(
         self,

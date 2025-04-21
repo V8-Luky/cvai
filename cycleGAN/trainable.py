@@ -94,41 +94,62 @@ class TrainableCycleGAN(L.LightningModule):
         self.loss_cycle = nn.L1Loss()
         self.loss_identity = nn.L1Loss()
 
+        self.automatic_optimization = False
+
     def forward(self, a, b):
         return self.model(a, b)
 
     def training_step(self, batch, batch_idx):
-        fake_a, fake_b, loss = self._make_step(batch["a"], batch["b"], "train")
-        return loss
+        fake_a, fake_b, losses = self._make_step(batch["a"], batch["b"], "train")
+
+        optimizers = self.optimizers()
+        lr_schedulers = self.lr_schedulers()
+        for loss, optimizer, lr_scheduler in zip(losses, optimizers, lr_schedulers):
+            optimizer.zero_grad()
+            self.manual_backward(loss)
+            optimizer.step()
+            lr_scheduler.step()
 
     def validation_step(self, batch, batch_idx):
-        _, _, loss = self._make_step(batch["a"], batch["b"], "valid")
-        return loss
+        fake_a, fake_b, _ = self._make_step(batch["a"], batch["b"], "valid")
 
     def test_step(self, batch, batch_idx):
-        return self._make_step(batch["a"], batch["b"], "test")
+        fake_a, fake_b, _ = self._make_step(batch["a"], batch["b"], "test")
+        return fake_a, fake_b
 
     def predict_step(self, batch, batch_idx):
         return self(batch["a"], batch["b"])
 
     def configure_optimizers(self):
 
-        optimizer = torch.optim.Adam(
-            self.model.get_parameters(),
+        optim_generator = torch.optim.Adam(
+            self.model.get_generator_params(),
             lr=self.hparams.train_config.learning_rate,
             betas=(0.5, 0.999),
         )
 
-        lr_scheduler = torch.optim.lr_scheduler.LambdaLR(
-            optimizer,
-            lr_lambda=LambdaLR(
-                self.hparams.train_config.max_epochs,
-                self.hparams.train_config.start_epoch,
-                self.hparams.train_config.decay_epoch,
-            ),
+        optim_discriminator_a = torch.optim.Adam(
+            self.model.get_discriminator_a_params(),
+            lr=self.hparams.train_config.learning_rate,
+            betas=(0.5, 0.999),
         )
 
-        return [optimizer], [lr_scheduler]
+        optim_discriminator_b = torch.optim.Adam(
+            self.model.get_discriminator_b_params(),
+            lr=self.hparams.train_config.learning_rate,
+            betas=(0.5, 0.999),
+        )
+
+        optimizers = [
+            optim_generator,
+            optim_discriminator_a,
+            optim_discriminator_b,
+        ]
+
+        lr_schedulers = [torch.optim.lr_scheduler.LambdaLR(optim, lr_lambda=LambdaLR(
+            self.hparams.train_config.max_epochs, self.hparams.train_config.start_epoch, self.hparams.train_config.decay_epoch)) for optim in optimizers]
+
+        return optimizers, lr_schedulers
 
     def configure_model(self):
         if self.model:
@@ -144,15 +165,8 @@ class TrainableCycleGAN(L.LightningModule):
         )
         loss_disc_a, loss_disc_b = self._discriminator_loss(a, b, fake_a, fake_b)
 
-        generator_loss = (
-            loss_gen_a
-            + loss_gen_b
-            + loss_cycle_a
-            + loss_cycle_b
-            + loss_idt_a
-            + loss_idt_b
-        )
-        discriminator_loss = (loss_disc_a + loss_disc_b) * 0.5
+        generator_loss = loss_gen_a + loss_gen_b + loss_cycle_a + loss_cycle_b + loss_idt_a + loss_idt_b
+        discriminator_loss = loss_disc_a + loss_disc_b
         loss = generator_loss + discriminator_loss
 
         self.log(f"{stage}_loss_gen_a", loss_gen_a)
@@ -167,7 +181,7 @@ class TrainableCycleGAN(L.LightningModule):
         self.log(f"{stage}_loss_discriminator", discriminator_loss)
         self.log(f"{stage}_loss", loss)
 
-        return fake_a, fake_b, loss
+        return fake_a, fake_b, (generator_loss, loss_disc_a, loss_disc_b)
 
     def _discriminator_loss(
         self,
@@ -186,13 +200,13 @@ class TrainableCycleGAN(L.LightningModule):
         disc_fake_a = self.model.discriminator_a(fake_a.detach())
         loss_disc_real_a = self.loss_gan(disc_real_a, torch.ones_like(disc_real_a))
         loss_disc_fake_a = self.loss_gan(disc_fake_a, torch.zeros_like(disc_fake_a))
-        loss_disc_a = loss_disc_real_a + loss_disc_fake_a
+        loss_disc_a = (loss_disc_real_a + loss_disc_fake_a) * 0.5
 
         disc_real_b = self.model.discriminator_b(real_b)
         disc_fake_b = self.model.discriminator_b(fake_b.detach())
         loss_disc_real_b = self.loss_gan(disc_real_b, torch.ones_like(disc_real_b))
         loss_disc_fake_b = self.loss_gan(disc_fake_b, torch.zeros_like(disc_fake_b))
-        loss_disc_b = loss_disc_real_b + loss_disc_fake_b
+        loss_disc_b = (loss_disc_real_b + loss_disc_fake_b) * 0.5
 
         return loss_disc_a, loss_disc_b
 

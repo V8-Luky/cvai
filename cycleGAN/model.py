@@ -71,13 +71,20 @@ class CycleGAN(nn.Module):
         """
         return self.generator_b_to_a(b), self.generator_a_to_b(a)
 
-    def get_discriminator_params(self) -> Iterator[nn.Parameter]:
+    def get_discriminator_a_params(self) -> Iterator[nn.Parameter]:
         """
-        Returns an iterator over all discriminator parameters (both A and B).
+        Returns an iterator over parameters of the discriminator for domain A.
 
-        :return: Iterator over discriminator parameters.
+        :return: Iterator over discriminator A parameters.
         """
         yield from self.discriminator_a.parameters()
+
+    def get_discriminator_b_params(self) -> Iterator[nn.Parameter]:
+        """
+        Returns an iterator over parameters of the discriminator for domain B.
+
+        :return: Iterator over discriminator B parameters.
+        """
         yield from self.discriminator_b.parameters()
 
     def get_generator_params(self) -> Iterator[nn.Parameter]:
@@ -88,12 +95,3 @@ class CycleGAN(nn.Module):
         """
         yield from self.generator_a_to_b.parameters()
         yield from self.generator_b_to_a.parameters()
-
-    def get_parameters(self) -> Iterator[nn.Parameter]:
-        """
-        Returns an iterator over all parameters of the CycleGAN model.
-
-        :return: Iterator over all model parameters.
-        """
-        yield from self.get_generator_params()
-        yield from self.get_discriminator_params()
