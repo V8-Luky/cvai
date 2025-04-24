@@ -80,7 +80,13 @@ class TrainableCycleGAN(L.LightningModule):
     """
 
     def __init__(
-        self, model_config: CycleGANConfig, train_config: TrainConfig, *args, **kwargs
+        self, 
+        model_config: CycleGANConfig, 
+        train_config: TrainConfig, 
+        model_config_detailed = None, 
+        train_config_detailed = None, 
+        *args, 
+        **kwargs
     ):
         super().__init__(*args, **kwargs)
         config = dict()
