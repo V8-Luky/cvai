@@ -28,6 +28,7 @@ class TrainConfig:
         lambda_a (float): Weight for cycle consistency loss in domain A
         lambda_b (float): Weight for cycle consistency loss in domain B
         lambda_identity (float): Weight for identity loss
+        gradient_acc_steps (int): Amount of steps to accumulate gradients for
     """
     max_epochs: int = 200
     start_epoch: int = 0
@@ -36,6 +37,7 @@ class TrainConfig:
     lambda_a: float = 10.0
     lambda_b: float = 10.0
     lambda_identity: float = 0.5
+    gradient_acc_steps: int = 10
 
 
 class LambdaLR:
@@ -64,7 +66,7 @@ class LambdaLR:
             self.n_epochs - self.decay_start_epoch
         )
 
-N = 10
+
 class TrainableCycleGAN(L.LightningModule):
     """
     A Lightning module for training CycleGAN models.
@@ -104,17 +106,14 @@ class TrainableCycleGAN(L.LightningModule):
 
         optimizers = self.optimizers()
         for loss, optimizer in zip(losses, optimizers):
-            loss /= N
+            loss /= self.hparams.train_config.gradient_acc_steps
             self.manual_backward(loss)
-            if (batch_idx + 1) % N == 0:
+            if (batch_idx + 1) % self.hparams.train_config.gradient_acc_steps == 0 or self.trainer.is_last_batch:
                 #self.clip_gradients(optimizer, gradient_clip_val=0.5, gradient_clip_algorithm="norm")
                 optimizer.step()
                 optimizer.zero_grad()
 
     def on_train_epoch_end(self):
-        for optimizer in self.optimizers():
-            optimizer.step()
-            optimizer.zero_grad()
         for scheduler in self.lr_schedulers():
             scheduler.step()
 
@@ -149,12 +148,8 @@ class TrainableCycleGAN(L.LightningModule):
             self._generator_loss(a, b, fake_a, fake_b)
         )
         generator_loss = loss_gen_a + loss_gen_b + loss_cycle_a + loss_cycle_b + loss_idt_a + loss_idt_b
-        if stage == "train":
-            loss_disc_a, loss_disc_b = self._discriminator_loss(a, b, fake_a, fake_b)
-            discriminator_loss = loss_disc_a + loss_disc_b
-        else:
-            torch.tensor(0.0, device=a.device)
-            loss_disc_a = loss_disc_b = discriminator_loss = torch.tensor(0.0, device=a.device)
+        loss_disc_a, loss_disc_b = self._discriminator_loss(a, b, fake_a, fake_b)
+        discriminator_loss = loss_disc_a + loss_disc_b
 
         loss = discriminator_loss + generator_loss
 
