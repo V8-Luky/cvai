@@ -64,7 +64,7 @@ class LambdaLR:
             self.n_epochs - self.decay_start_epoch
         )
 
-
+N = 10
 class TrainableCycleGAN(L.LightningModule):
     """
     A Lightning module for training CycleGAN models.
@@ -103,12 +103,20 @@ class TrainableCycleGAN(L.LightningModule):
         fake_a, fake_b, losses = self._make_step(batch["a"], batch["b"], "train")
 
         optimizers = self.optimizers()
-        lr_schedulers = self.lr_schedulers()
-        for loss, optimizer, lr_scheduler in zip(losses, optimizers, lr_schedulers):
-            optimizer.zero_grad()
+        for loss, optimizer in zip(losses, optimizers):
+            loss /= N
             self.manual_backward(loss)
+            if (batch_idx + 1) % N == 0:
+                #self.clip_gradients(optimizer, gradient_clip_val=0.5, gradient_clip_algorithm="norm")
+                optimizer.step()
+                optimizer.zero_grad()
+
+    def on_train_epoch_end(self):
+        for optimizer in self.optimizers():
             optimizer.step()
-            lr_scheduler.step()
+            optimizer.zero_grad()
+        for scheduler in self.lr_schedulers():
+            scheduler.step()
 
     def validation_step(self, batch, batch_idx):
         fake_a, fake_b, _ = self._make_step(batch["a"], batch["b"], "valid")
@@ -140,11 +148,15 @@ class TrainableCycleGAN(L.LightningModule):
         loss_gen_a, loss_gen_b, loss_cycle_a, loss_cycle_b, loss_idt_a, loss_idt_b = (
             self._generator_loss(a, b, fake_a, fake_b)
         )
-        loss_disc_a, loss_disc_b = self._discriminator_loss(a, b, fake_a, fake_b)
-
         generator_loss = loss_gen_a + loss_gen_b + loss_cycle_a + loss_cycle_b + loss_idt_a + loss_idt_b
-        discriminator_loss = loss_disc_a + loss_disc_b
-        loss = generator_loss + discriminator_loss
+        if stage == "train":
+            loss_disc_a, loss_disc_b = self._discriminator_loss(a, b, fake_a, fake_b)
+            discriminator_loss = loss_disc_a + loss_disc_b
+        else:
+            torch.tensor(0.0, device=a.device)
+            loss_disc_a = loss_disc_b = discriminator_loss = torch.tensor(0.0, device=a.device)
+
+        loss = discriminator_loss + generator_loss
 
         self.log(f"{stage}_loss_gen_a", loss_gen_a)
         self.log(f"{stage}_loss_gen_b", loss_gen_b)

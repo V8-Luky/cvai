@@ -19,8 +19,9 @@ class UnpairedImageDataset(Dataset):
         self.domain_b_paths = self._load_paths(domain_b_dir, image_extensions)
 
         self.transform = transform or T.Compose([
+            T.ToImage(),
             T.Resize((256, 256)),
-            T.ToTensor(),
+            T.ToDtype(torch.float32, scale=True),
             T.Normalize((0.5,), (0.5,))
         ])
 
