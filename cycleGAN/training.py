@@ -75,6 +75,7 @@ class Training:
             logger=logger,
             log_every_n_steps=100,
             callbacks=self.callbacks,
+            precision="16-mixed",
         )
 
         trainer.fit(self.model, datamodule=self.datamodule)
@@ -176,4 +177,4 @@ class Sweep:
             sweep=self.sweep_config, project=self.project, entity=self.entity
         )
         wandb.agent(sweep_id=sweep_id, function=self.run_training, count=self.count)
-        wandb.teardown()
+        wandb.api.stop_sweep(sweep_id)

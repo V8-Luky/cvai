@@ -28,6 +28,7 @@ class TrainConfig:
         lambda_a (float): Weight for cycle consistency loss in domain A
         lambda_b (float): Weight for cycle consistency loss in domain B
         lambda_identity (float): Weight for identity loss
+        gradient_acc_steps (int): Amount of steps to accumulate gradients for
     """
     max_epochs: int = 200
     start_epoch: int = 0
@@ -36,6 +37,7 @@ class TrainConfig:
     lambda_a: float = 10.0
     lambda_b: float = 10.0
     lambda_identity: float = 0.5
+    gradient_acc_steps: int = 10
 
 
 class LambdaLR:
@@ -78,7 +80,13 @@ class TrainableCycleGAN(L.LightningModule):
     """
 
     def __init__(
-        self, model_config: CycleGANConfig, train_config: TrainConfig, *args, **kwargs
+        self, 
+        model_config: CycleGANConfig, 
+        train_config: TrainConfig, 
+        model_config_detailed = None, 
+        train_config_detailed = None, 
+        *args, 
+        **kwargs
     ):
         super().__init__(*args, **kwargs)
         config = dict()
@@ -103,12 +111,17 @@ class TrainableCycleGAN(L.LightningModule):
         fake_a, fake_b, losses = self._make_step(batch["a"], batch["b"], "train")
 
         optimizers = self.optimizers()
-        lr_schedulers = self.lr_schedulers()
-        for loss, optimizer, lr_scheduler in zip(losses, optimizers, lr_schedulers):
-            optimizer.zero_grad()
+        for loss, optimizer in zip(losses, optimizers):
+            loss /= self.hparams.train_config.gradient_acc_steps
             self.manual_backward(loss)
-            optimizer.step()
-            lr_scheduler.step()
+            if (batch_idx + 1) % self.hparams.train_config.gradient_acc_steps == 0 or self.trainer.is_last_batch:
+                #self.clip_gradients(optimizer, gradient_clip_val=0.5, gradient_clip_algorithm="norm")
+                optimizer.step()
+                optimizer.zero_grad()
+
+    def on_train_epoch_end(self):
+        for scheduler in self.lr_schedulers():
+            scheduler.step()
 
     def validation_step(self, batch, batch_idx):
         fake_a, fake_b, _ = self._make_step(batch["a"], batch["b"], "valid")
@@ -140,11 +153,11 @@ class TrainableCycleGAN(L.LightningModule):
         loss_gen_a, loss_gen_b, loss_cycle_a, loss_cycle_b, loss_idt_a, loss_idt_b = (
             self._generator_loss(a, b, fake_a, fake_b)
         )
-        loss_disc_a, loss_disc_b = self._discriminator_loss(a, b, fake_a, fake_b)
-
         generator_loss = loss_gen_a + loss_gen_b + loss_cycle_a + loss_cycle_b + loss_idt_a + loss_idt_b
+        loss_disc_a, loss_disc_b = self._discriminator_loss(a, b, fake_a, fake_b)
         discriminator_loss = loss_disc_a + loss_disc_b
-        loss = generator_loss + discriminator_loss
+
+        loss = discriminator_loss + generator_loss
 
         self.log(f"{stage}_loss_gen_a", loss_gen_a)
         self.log(f"{stage}_loss_gen_b", loss_gen_b)

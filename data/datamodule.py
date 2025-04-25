@@ -1,4 +1,4 @@
-import pytorch_lightning as pl
+import lightning as pl
 from torch.utils.data import DataLoader, random_split
 from data.dataset import UnpairedImageDataset
 
@@ -30,6 +30,9 @@ class UnpairedDataModule(pl.LightningDataModule):
         train_size = int(self.split_ratio * len(full_dataset))
         val_size = len(full_dataset) - train_size
         self.train_dataset, self.val_dataset = random_split(full_dataset, [train_size, val_size])
+
+    def prepare_data(self):
+        pass
 
     def train_dataloader(self):
         return DataLoader(self.train_dataset, batch_size=self.batch_size, shuffle=True, num_workers=self.num_workers)

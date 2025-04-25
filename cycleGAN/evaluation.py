@@ -34,9 +34,7 @@ class Evaluation:
         artifact = run.use_artifact(self.artifact, type="model")
         artifact_dir = artifact.download()
 
-        checkpoint = torch.load(artifact_dir + "/model.ckpt")
-
-        model = TrainableCycleGAN.load_from_checkpoint(checkpoint)
+        model = TrainableCycleGAN.load_from_checkpoint(artifact_dir + "/model.ckpt")
         logger = WandbLogger(name=self.name, log_model=True)
 
         trainer = L.Trainer(
