@@ -165,10 +165,10 @@ class TrainableCycleGAN(L.LightningModule):
         fake_a: torch.Tensor,
         fake_b: torch.Tensor,
     ):
-        self.save_image(real_a, "real_a")
-        self.save_image(real_b, "real_b")
-        self.save_image(fake_a, "fake_a")
-        self.save_image(fake_b, "fake_b")
+        self.save_image(real_a.detach().cpu(), "real_a")
+        self.save_image(real_b.detach().cpu(), "real_b")
+        self.save_image(fake_a.detach().cpu(), "fake_a")
+        self.save_image(fake_b.detach().cpu(), "fake_b")
 
     def save_image(self, tensor: torch.Tensor, name: str):
         save_image(tensor * 0.5 + 0.5, f"{self.trainer.ckpt_path}/{name}_ep{self.trainer.current_epoch}.jpg")
