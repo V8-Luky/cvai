@@ -10,6 +10,7 @@ It contains:
 import lightning as L
 import torch.nn as nn
 import torch
+from torchvision.utils import save_image
 
 from dataclasses import dataclass
 from .model import CycleGAN, CycleGANConfig
@@ -29,6 +30,8 @@ class TrainConfig:
         lambda_b (float): Weight for cycle consistency loss in domain B
         lambda_identity (float): Weight for identity loss
         gradient_acc_steps (int): Amount of steps to accumulate gradients for
+        save_train (bool): Save the first image paris of the first batch per epoch for the train set
+        save_valid (bool): Save the first image paris of the first batch per epoch for the valid set
     """
     max_epochs: int = 200
     start_epoch: int = 0
@@ -38,6 +41,8 @@ class TrainConfig:
     lambda_b: float = 10.0
     lambda_identity: float = 0.5
     gradient_acc_steps: int = 10
+    save_train: bool = True,
+    save_valid: bool = False,
 
 
 class LambdaLR:
@@ -119,6 +124,9 @@ class TrainableCycleGAN(L.LightningModule):
                 optimizer.step()
                 optimizer.zero_grad()
 
+        if self.hparams.train_config.save_train and batch_idx == 0:
+            self.save_images(batch["a"], batch["b"], fake_a, fake_b)
+
     def on_train_epoch_end(self):
         for scheduler in self.lr_schedulers():
             scheduler.step()
@@ -126,15 +134,18 @@ class TrainableCycleGAN(L.LightningModule):
     def validation_step(self, batch, batch_idx):
         fake_a, fake_b, _ = self._make_step(batch["a"], batch["b"], "valid")
 
+        if self.hparams.train_config.save_valid and batch_idx == 0:
+            self.save_images(batch["a"], batch["b"], fake_a, fake_b)
+
     def test_step(self, batch, batch_idx):
         fake_a, fake_b, _ = self._make_step(batch["a"], batch["b"], "test")
+        self.save_images(batch["a"], batch["b"], fake_a, fake_b)
         return fake_a, fake_b
 
     def predict_step(self, batch, batch_idx):
         return self(batch["a"], batch["b"])
 
     def configure_optimizers(self):
-
         param_groups = (self.model.get_generator_params(), self.model.get_discriminator_a_params(), self.model.get_discriminator_b_params())
         optimizers = [torch.optim.Adam(params, lr=self.hparams.train_config.learning_rate, betas=(0.5, 0.999)) for params in param_groups]
         lr_schedulers = [torch.optim.lr_scheduler.LambdaLR(optim, lr_lambda=self._new_lr_lambda()) for optim in optimizers]
@@ -146,6 +157,22 @@ class TrainableCycleGAN(L.LightningModule):
             return
 
         self.model = CycleGAN(self.hparams.model_config)
+
+    def save_images(
+        self,
+        real_a: torch.Tensor,
+        real_b: torch.Tensor,
+        fake_a: torch.Tensor,
+        fake_b: torch.Tensor,
+    ):
+        self.save_image(real_a, "real_a")
+        self.save_image(real_b, "real_b")
+        self.save_image(fake_a, "fake_a")
+        self.save_image(fake_b, "fake_b")
+
+    def save_image(self, tensor: torch.Tensor, name: str):
+        save_image(tensor * 0.5 + 0.5, f"{self.trainer.ckpt_path}/{name}_ep{self.trainer.current_epoch}.jpg")
+
 
     def _make_step(self, a, b, stage: str):
         fake_a, fake_b = self(a, b)
