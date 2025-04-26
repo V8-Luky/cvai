@@ -170,6 +170,7 @@ class Sweep:
             lambda_a=config["lambda_a"],
             lambda_b=config["lambda_b"],
             lambda_identity=config["lambda_identity"],
+            gradient_acc_steps=config["gradient_acc_steps"],
         )
 
     def __call__(self, *args, **kwds):
