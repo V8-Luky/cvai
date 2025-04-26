@@ -42,7 +42,8 @@ def test_datamodule_batch():
         dataset_id="shubham1921/real-to-ghibli-image-dataset-5k-paired-images",
         train_a_subdir="dataset/trainA",
         train_b_subdir="dataset/trainB_ghibli",
-        test_domain_dir=str(path / "trainA"),
+        test_domain_a_dir=str(path / "trainA"),
+        test_domain_b_dir=str(path / "trainB_ghibli"),
         batch_size=2,
         num_workers=0
     )
@@ -56,6 +57,6 @@ def test_datamodule_batch():
     dm.setup(stage="test")
     test_batch = next(iter(dm.test_dataloader()))
     assert test_batch["a"].shape == (2, 3, 256, 256)
-    assert test_batch["b"] is None
+    assert test_batch["b"].shape == (2, 3, 256, 256)
 
 

@@ -30,7 +30,7 @@ class UnpairedImageDataset(Dataset):
     ):
         super().__init__()
         self.domain_a_paths = self._load_paths(domain_a_dir, image_extensions)
-        self.domain_b_paths = self._load_paths(domain_b_dir, image_extensions) if domain_b_dir else []
+        self.domain_b_paths = self._load_paths(domain_b_dir, image_extensions)
 
         self.transform = transform or T.Compose([
             T.ToImage(),
@@ -72,19 +72,16 @@ class UnpairedImageDataset(Dataset):
         Returns:
             dict: Dictionary with:
                 - "a" (Tensor): Transformed domain A image.
-                - "b" (Tensor or None): Transformed domain B image, or None if not available.
+                - "b" (Tensor): Transformed domain B image.
         """
         a_img_path = self.domain_a_paths[idx % len(self.domain_a_paths)]
+        b_img_path = self.domain_b_paths[torch.randint(len(self.domain_b_paths), ()).item()]
+
         a_img = Image.open(a_img_path).convert("RGB")
-        
-        if self.domain_b_paths:
-            b_img_path = self.domain_b_paths[torch.randint(len(self.domain_b_paths), (), generator=self.generator).item()]
-            b_img = Image.open(b_img_path).convert("RGB")
-            b_tensor = self.transform(b_img)
-        else:
-            b_tensor = None
+        b_img = Image.open(b_img_path).convert("RGB")
 
         return {
             "a": self.transform(a_img),
-            "b": b_tensor
+            "b": self.transform(b_img)
         }
+

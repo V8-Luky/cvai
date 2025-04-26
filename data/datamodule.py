@@ -25,7 +25,8 @@ class UnpairedDataModule(pl.LightningDataModule):
         self,
         train_a_subdir: str = "trainA",
         train_b_subdir: str = "trainB_ghibli",
-        test_domain_dir: str = None,
+        test_domain_a_dir: str = None,
+        test_domain_b_dir: str = None,
         dataset_id: str = None,
         transform=None,
         batch_size: int = 16,
@@ -37,7 +38,8 @@ class UnpairedDataModule(pl.LightningDataModule):
         self._domain_b_dir = None
         self.train_a_subdir = train_a_subdir
         self.train_b_subdir = train_b_subdir
-        self.test_domain_dir = test_domain_dir
+        self.test_domain_a_dir = test_domain_a_dir
+        self.test_domain_b_dir = test_domain_b_dir
         self.dataset_id = dataset_id
         self.transform = transform
         self.batch_size = batch_size
@@ -67,34 +69,14 @@ class UnpairedDataModule(pl.LightningDataModule):
             self.train_dataset, self.val_dataset = random_split(full_dataset, [train_size, val_size], generator=self.generator)
     
         if stage == "test":
-            if self.test_domain_dir is None:
+            if self.test_domain_a_dir is None or self.test_domain_b_dir is None:
                 raise ValueError("Test dataset path not set.")
             
             self.test_dataset = UnpairedImageDataset(
-                domain_a_dir=self.test_domain_dir,
-                domain_b_dir=None,
+                domain_a_dir=self.test_domain_a_dir,
+                domain_b_dir=self.test_domain_b_dir,
                 transform=self.transform
             )
-
-    def safe_collate(self, batch):
-        """
-        Safely collate a batch of samples, allowing for None values.
-
-        Args:
-            batch (list): List of samples (dicts) from the dataset.
-
-        Returns:
-            dict: A batch with properly collated tensors and None fields where appropriate.
-        """
-        batch_out = {}
-        for key in batch[0].keys():
-            values = [sample[key] for sample in batch]
-            if all(v is None for v in values):
-                batch_out[key] = None
-            else:
-                batch_out[key] = default_collate([v for v in values if v is not None])
-        return batch_out
-
 
     def prepare_data(self):
         """
@@ -111,8 +93,9 @@ class UnpairedDataModule(pl.LightningDataModule):
             print(f"Domain A path: {self._domain_a_dir}")
             print(f"Domain B path: {self._domain_b_dir}")
             
-            if self.test_domain_dir:
-                print(f"Test domain path: {self.test_domain_dir}")
+            if self.test_domain_a_dir and self.test_domain_b_dir:
+                print(f"Test domain path: {self.test_domain_a_dir}")
+                print(f"Test domain path: {self.test_domain_b_dir}")
 
 
     def train_dataloader(self):
@@ -140,5 +123,5 @@ class UnpairedDataModule(pl.LightningDataModule):
         Returns:
             DataLoader: Test DataLoader.
         """
-        return DataLoader(self.test_dataset, batch_size=self.batch_size, shuffle=False, num_workers=self.num_workers, collate_fn=self.safe_collate, generator=self.generator)
+        return DataLoader(self.test_dataset, batch_size=self.batch_size, shuffle=False, num_workers=self.num_workers, generator=self.generator)
 
