@@ -38,9 +38,24 @@ def test_unpaired_dataset_larger_images(tmp_path):
 
 def test_datamodule_batch():
     path = Path("/home/jovyan/.cache/kagglehub/datasets/shubham1921/real-to-ghibli-image-dataset-5k-paired-images/versions/1/dataset")
-    dm = UnpairedDataModule(domain_a_dir=path / "trainA", domain_b_dir=path / "trainB_ghibli", batch_size=2, num_workers=0)
-    dm.setup()
-    batch = next(iter(dm.train_dataloader()))
+    dm = UnpairedDataModule(
+        dataset_id="shubham1921/real-to-ghibli-image-dataset-5k-paired-images",
+        train_a_subdir="dataset/trainA",
+        train_b_subdir="dataset/trainB_ghibli",
+        test_domain_dir=str(path / "trainA"),
+        batch_size=2,
+        num_workers=0
+    )
+    dm.prepare_data() 
+    dm.setup(stage="fit")
 
-    assert batch["a"].shape == (2, 3, 256, 256)
-    assert batch["b"].shape == (2, 3, 256, 256)
+    train_batch = next(iter(dm.train_dataloader()))
+    assert train_batch["a"].shape == (2, 3, 256, 256)
+    assert train_batch["b"].shape == (2, 3, 256, 256)
+
+    dm.setup(stage="test")
+    test_batch = next(iter(dm.test_dataloader()))
+    assert test_batch["a"].shape == (2, 3, 256, 256)
+    assert test_batch["b"] is None
+
+
