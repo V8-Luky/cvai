@@ -6,10 +6,12 @@ It contains:
 - LambdaLR: A learning rate scheduler for gradually reducing learning rate
 - TrainableCycleGAN: A Lightning module that implements the CycleGAN training logic
 """
+from pathlib import Path
 
 import lightning as L
 import torch.nn as nn
 import torch
+from torchvision.utils import save_image
 
 from dataclasses import dataclass
 from .model import CycleGAN, CycleGANConfig
@@ -29,6 +31,9 @@ class TrainConfig:
         lambda_b (float): Weight for cycle consistency loss in domain B
         lambda_identity (float): Weight for identity loss
         gradient_acc_steps (int): Amount of steps to accumulate gradients for
+        save_train (bool): Save the first image paris of the first batch per epoch for the train set
+        save_valid (bool): Save the first image paris of the first batch per epoch for the valid set
+        save_location (str): Storage location for saved images
     """
     max_epochs: int = 200
     start_epoch: int = 0
@@ -38,6 +43,9 @@ class TrainConfig:
     lambda_b: float = 10.0
     lambda_identity: float = 0.5
     gradient_acc_steps: int = 10
+    save_train: bool = True
+    save_valid: bool = False
+    save_location: str = "./gan_images"
 
 
 class LambdaLR:
@@ -104,6 +112,9 @@ class TrainableCycleGAN(L.LightningModule):
 
         self.automatic_optimization = False
 
+        storage_path = Path(self.hparams.train_config.save_location)
+        storage_path.mkdir(parents=True, exist_ok=True)
+
     def forward(self, a, b):
         return self.model(a, b)
 
@@ -119,6 +130,9 @@ class TrainableCycleGAN(L.LightningModule):
                 optimizer.step()
                 optimizer.zero_grad()
 
+        if self.hparams.train_config.save_train and batch_idx == 0:
+            self.save_images(batch["a"], batch["b"], fake_a, fake_b, "train")
+
     def on_train_epoch_end(self):
         for scheduler in self.lr_schedulers():
             scheduler.step()
@@ -126,15 +140,18 @@ class TrainableCycleGAN(L.LightningModule):
     def validation_step(self, batch, batch_idx):
         fake_a, fake_b, _ = self._make_step(batch["a"], batch["b"], "valid")
 
+        if self.hparams.train_config.save_valid and batch_idx == 0:
+            self.save_images(batch["a"], batch["b"], fake_a, fake_b, "valid")
+
     def test_step(self, batch, batch_idx):
         fake_a, fake_b, _ = self._make_step(batch["a"], batch["b"], "test")
+        self.save_images(batch["a"], batch["b"], fake_a, fake_b, "test", save_all=True)
         return fake_a, fake_b
 
     def predict_step(self, batch, batch_idx):
         return self(batch["a"], batch["b"])
 
     def configure_optimizers(self):
-
         param_groups = (self.model.get_generator_params(), self.model.get_discriminator_a_params(), self.model.get_discriminator_b_params())
         optimizers = [torch.optim.Adam(params, lr=self.hparams.train_config.learning_rate, betas=(0.5, 0.999)) for params in param_groups]
         lr_schedulers = [torch.optim.lr_scheduler.LambdaLR(optim, lr_lambda=self._new_lr_lambda()) for optim in optimizers]
@@ -146,6 +163,28 @@ class TrainableCycleGAN(L.LightningModule):
             return
 
         self.model = CycleGAN(self.hparams.model_config)
+
+    def save_images(
+        self,
+        real_a: torch.Tensor,
+        real_b: torch.Tensor,
+        fake_a: torch.Tensor,
+        fake_b: torch.Tensor,
+        dataset: str,
+        *,
+        save_all: bool = False
+    ):
+        self.save_image(real_a.detach().cpu(), dataset, "real_a", save_all)
+        self.save_image(real_b.detach().cpu(), dataset, "real_b", save_all)
+        self.save_image(fake_a.detach().cpu(), dataset, "fake_a", save_all)
+        self.save_image(fake_b.detach().cpu(), dataset, "fake_b", save_all)
+
+    def save_image(self, tensor: torch.Tensor, dataset: str, name: str, save_all: bool):
+        path = f"{self.hparams.train_config.save_location}/{dataset}-ep{self.trainer.current_epoch}_{name}"
+        save_image(tensor[0] * 0.5 + 0.5, f"{path}.jpg")
+        if save_all:
+            for i in range(1, len(tensor)):
+                save_image(tensor[i] * 0.5 + 0.5, f"{path}_{i}.jpg")
 
     def _make_step(self, a, b, stage: str):
         fake_a, fake_b = self(a, b)
