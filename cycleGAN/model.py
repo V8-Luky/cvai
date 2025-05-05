@@ -95,3 +95,12 @@ class CycleGAN(nn.Module):
         """
         yield from self.generator_a_to_b.parameters()
         yield from self.generator_b_to_a.parameters()
+
+    def get_discriminator_params(self) -> Iterator[nn.Parameter]:
+        """
+        Returns an iterator over all discriminator parameters (both A and B).
+
+        :return: Iterator over generator parameters.
+        """
+        yield from self.get_discriminator_a_params()
+        yield from self.get_discriminator_b_params()
