@@ -50,7 +50,7 @@ class ResidualGenerator(nn.Module):
                 kernel_size=3,
                 stride=2,
                 padding=1,
-                out_padding=1,
+                output_padding=1,
             ) for m in range(sampling_steps, 0, -1)]
         )
 
@@ -80,7 +80,7 @@ class ResidualBlock(nn.Module):
     def __init__(self, dim):
         super().__init__()
         self.block = nn.Sequential(
-            ConvBlock(dim, dim, kernel_size=3, padding=1, stide=1),
+            ConvBlock(dim, dim, kernel_size=3, padding=1, stride=1),
             ConvBlock(dim, dim, use_act=False, kernel_size=3, padding=1)
         )
 

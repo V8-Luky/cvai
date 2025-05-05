@@ -255,7 +255,7 @@ class TrainableCycleGAN(L.LightningModule):
         :return: Total generator loss.
         """
         lambda_idt = self.hparams.train_config.lambda_identity
-        lambda_cycle = self.hparams.train_config.lamda_cycle
+        lambda_cycle = self.hparams.train_config.lambda_cycle
 
         disc_a = self.model.discriminator_a(fake_a)
         disc_b = self.model.discriminator_b(fake_b)
