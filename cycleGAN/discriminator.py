@@ -1,4 +1,5 @@
 import torch.nn as nn
+import torch.nn.functional as F
 
 
 class PatchBlock(nn.Module):
@@ -16,9 +17,16 @@ class PatchBlock(nn.Module):
     def __init__(self, in_channels, out_channels, kernel_size=4, stride=2, padding=1):
         super().__init__()
         self.model = nn.Sequential(
-            nn.Conv2d(in_channels, out_channels, kernel_size=kernel_size, stride=stride, padding=padding),
+            nn.Conv2d(
+                in_channels,
+                out_channels,
+                kernel_size=kernel_size,
+                stride=stride,
+                padding=padding,
+                padding_mode="reflect"
+            ),
             nn.InstanceNorm2d(out_channels),
-            nn.LeakyReLU(0.2, inplace=True)
+            nn.LeakyReLU(0.2)
         )
 
     def forward(self, x):
@@ -45,17 +53,26 @@ class PatchGanDiscriminator(nn.Module):
     def __init__(self, in_channels=3, channels=64, n_layers=3):
         super().__init__()
 
-        self.model = nn.Sequential(
-            nn.Conv2d(in_channels, channels, kernel_size=4, stride=2, padding=1),
-            nn.LeakyReLU(0.2, inplace=True)
+        layers = [
+            nn.Conv2d(in_channels, channels, kernel_size=4, stride=2, padding=1, padding_mode="reflect"),
+            nn.LeakyReLU(0.2)
+        ]
+
+        layers.extend(
+            [PatchBlock(channels * 2 ** m, channels * 2 ** (m + 1)) for m in range(n_layers - 1)]
         )
 
-        self.model.extend(nn.Sequential(
-            *[PatchBlock(channels * 2 ** m, channels * 2 ** (m + 1)) for m in range(n_layers - 1)]
+        layers.append(PatchBlock(channels * 2 ** (n_layers - 1), channels * 2 ** n_layers, stride=1))
+        layers.append(nn.Conv2d(
+            channels * 2 ** n_layers,
+            1,
+            kernel_size=4,
+            stride=1,
+            padding=1,
+            padding_mode="reflect"
         ))
 
-        self.model.append(PatchBlock(channels * 2 ** (n_layers - 1), channels * 2 ** n_layers, stride=1))
-        self.model.append(nn.Conv2d(channels * 2 ** n_layers, 1, kernel_size=4, stride=1, padding=1))
+        self.model = nn.Sequential(*layers)
 
     def forward(self, input):
         """
@@ -64,7 +81,7 @@ class PatchGanDiscriminator(nn.Module):
         :param input: Input tensor of shape (B, C, H, W).
         :return: Patch-level discrimination scores.
         """
-        return self.model(input)
+        return F.sigmoid(self.model(input))
 
 
 class PixelGanDiscriminator(nn.Module):
@@ -81,7 +98,7 @@ class PixelGanDiscriminator(nn.Module):
         super().__init__()
 
         self.model = nn.Sequential(
-            nn.Conv2d(in_channels, channels, kernel_size=1, stride=1, padding=0),
+            nn.Conv2d(in_channels, channels, kernel_size=1, stride=1, padding=0, padding_mode="reflect"),
             nn.LeakyReLU(0.2, inplace=True)
         )
 
@@ -90,7 +107,14 @@ class PixelGanDiscriminator(nn.Module):
               for m in range(n_layers)]
         ))
 
-        self.model.append(nn.Conv2d(channels * 2 ** n_layers, 1, kernel_size=1, stride=1, padding=0))
+        self.model.append(nn.Conv2d(
+            channels * 2 ** n_layers,
+            1,
+            kernel_size=1,
+            stride=1,
+            padding=0,
+            padding_mode="reflect"
+        ))
 
     def forward(self, input):
         """
@@ -99,4 +123,4 @@ class PixelGanDiscriminator(nn.Module):
         :param input: Input tensor of shape (B, C, H, W).
         :return: Pixel-level discrimination scores.
         """
-        return self.model(input)
+        return F.sigmoid(self.model(input))

@@ -1,5 +1,6 @@
 import torch
 import torch.nn as nn
+import torch.nn.functional as F
 
 
 class ResidualGenerator(nn.Module):
@@ -17,43 +18,47 @@ class ResidualGenerator(nn.Module):
     :param channels: Base number of channels used in convolutions.
     :param n_blocks: Number of residual blocks used in the network.
     :param sampling_steps: Number of downsampling and upsampling layers.
-    :param padding_mode: Padding mode used in convolutional layers.
     """
-    def __init__(self, in_channels=3, channels=64, n_blocks=9, sampling_steps=3, padding_mode='reflect'):
+    def __init__(self, in_channels=3, channels=64, n_blocks=9, sampling_steps=2):
         super().__init__()
-        self.model = nn.Sequential(
-            nn.Conv2d(in_channels, channels, kernel_size=7, padding=3, padding_mode=padding_mode),
-            nn.InstanceNorm2d(channels),
+        layers = [
+            nn.Conv2d(in_channels, channels, kernel_size=7, padding=3, stride=1, padding_mode="reflect"),
             nn.ReLU(inplace=True),
-        )
+        ]
 
-        self.model.extend(nn.Sequential(
-            *[ConvBlock(
+        layers.extend(
+            [ConvBlock(
                 channels * 2 ** m,
                 channels * 2 ** (m + 1),
                 down=True,
-                padding_mode=padding_mode
+                kernel_size=3,
+                stride=2,
+                padding=1,
             ) for m in range(sampling_steps)]
-        ))
+        )
 
-        self.model.extend(nn.Sequential(
-            *[ResidualBlock(channels * 2 ** sampling_steps, padding_mode=padding_mode)
+        layers.extend(
+            [ResidualBlock(channels * 2 ** sampling_steps)
               for _ in range(n_blocks)]
-        ))
+        )
 
-        self.model.extend(nn.Sequential(
-            *[ConvBlock(
+        layers.extend(
+            [ConvBlock(
                 channels * 2 ** m,
                 channels * 2 ** (m - 1),
                 down=False,
-                padding_mode=padding_mode
+                kernel_size=3,
+                stride=2,
+                padding=1,
+                out_padding=1,
             ) for m in range(sampling_steps, 0, -1)]
-        ))
+        )
 
-        self.model.extend(nn.Sequential(
-            nn.Conv2d(channels, in_channels, kernel_size=7, padding=3, padding_mode=padding_mode),
-            nn.Tanh()
-        ))
+        layers.append(
+            nn.Conv2d(channels, in_channels, kernel_size=7, padding=3, stride=1, padding_mode="reflect")
+        )
+
+        self.model = nn.Sequential(*layers)
 
     def forward(self, input):
         """
@@ -62,7 +67,7 @@ class ResidualGenerator(nn.Module):
         :param input: Input tensor of shape (B, C, H, W).
         :return: Output tensor of the same shape as the input.
         """
-        return self.model(input)
+        return F.tanh(self.model(input))
 
 
 class ResidualBlock(nn.Module):
@@ -72,12 +77,11 @@ class ResidualBlock(nn.Module):
     :param dim: Number of input and output channels.
     :param padding_mode: Padding mode used in the convolution layers.
     """
-    def __init__(self, dim, padding_mode):
+    def __init__(self, dim):
         super().__init__()
         self.block = nn.Sequential(
-            nn.Conv2d(dim, dim, kernel_size=3, padding=1, padding_mode=padding_mode),
-            nn.ReLU(inplace=True),
-            nn.Conv2d(dim, dim, kernel_size=3, padding=1, padding_mode=padding_mode),
+            ConvBlock(dim, dim, kernel_size=3, padding=1, stide=1),
+            ConvBlock(dim, dim, use_act=False, kernel_size=3, padding=1)
         )
 
     def forward(self, x):
@@ -96,17 +100,18 @@ class ConvBlock(nn.Module):
 
     :param in_dim: Number of input channels.
     :param out_dim: Number of output channels.
-    :param padding_mode: Padding mode used in the convolution layer.
     :param down: If True, performs downsampling using Conv2d; otherwise, performs upsampling using ConvTranspose2d.
+    :param use_act: If True, activate output with ReLU; otherwise return unactivated.
+    :param **kwargs: Arguments for Conv2d and ConvTranspose2d layers.
     """
-    def __init__(self, in_dim, out_dim, padding_mode, down=True):
+    def __init__(self, in_dim, out_dim, down=True, use_act=True, **kwargs):
         super().__init__()
         self.block = nn.Sequential(
-            nn.Conv2d(in_dim, out_dim, kernel_size=3, stride=2, padding=1, padding_mode=padding_mode)
+            nn.Conv2d(in_dim, out_dim, padding_mode="reflect", **kwargs)
             if down else
-            nn.ConvTranspose2d(in_dim, out_dim, kernel_size=3, stride=2, output_padding=1, padding=1),
+            nn.ConvTranspose2d(in_dim, out_dim, **kwargs),
             nn.InstanceNorm2d(out_dim),
-            nn.ReLU(inplace=True),
+            nn.ReLU(inplace=True) if use_act else nn.Identity(),
         )
 
     def forward(self, x):
