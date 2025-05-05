@@ -11,6 +11,8 @@ from pathlib import Path
 import lightning as L
 import torch.nn as nn
 import torch
+import wandb
+
 from torchvision.utils import save_image
 
 from dataclasses import dataclass
@@ -111,7 +113,7 @@ class TrainableCycleGAN(L.LightningModule):
 
         self.automatic_optimization = False
 
-        storage_path = Path(self.hparams.train_config.save_location)
+        storage_path = Path(self._storage_folder())
         storage_path.mkdir(parents=True, exist_ok=True)
 
     def forward(self, a, b):
@@ -179,7 +181,7 @@ class TrainableCycleGAN(L.LightningModule):
         self.save_image(fake_b.detach().cpu(), dataset, "fake_b", save_all)
 
     def save_image(self, tensor: torch.Tensor, dataset: str, name: str, save_all: bool):
-        path = f"{self.hparams.train_config.save_location}/{dataset}-ep{self.trainer.current_epoch}_{name}"
+        path = f"{self._storage_folder()}/{dataset}-ep{self.trainer.current_epoch}_{name}"
         save_image(tensor[0] * 0.5 + 0.5, f"{path}.jpg")
         if save_all:
             for i in range(1, len(tensor)):
@@ -290,3 +292,9 @@ class TrainableCycleGAN(L.LightningModule):
             self.hparams.train_config.start_epoch,
             self.hparams.train_config.decay_epoch,
         )
+    
+    def _storage_folder(self):
+        """
+        Returns the storage folder for saving images.
+        """
+        return str(Path(self.hparams.train_config.save_location, wandb.run.id))
