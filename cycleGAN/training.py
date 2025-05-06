@@ -8,6 +8,8 @@ It contains two main classes:
 
 import lightning as L
 import wandb
+import gc
+import torch
 
 from lightning.pytorch.callbacks import (
     LearningRateMonitor,
@@ -152,6 +154,9 @@ class Sweep:
         wandb.init(name=run_name)
         config = wandb.config
 
+        gc.collect()
+        torch.cuda.empty_cache()
+
         L.seed_everything(SEED)
 
         train_config = self.get_train_config(config)
@@ -167,8 +172,7 @@ class Sweep:
             start_epoch=config["start_epoch"],
             decay_epoch=config["decay_epoch"],
             learning_rate=config["learning_rate"],
-            lambda_a=config["lambda_a"],
-            lambda_b=config["lambda_b"],
+            lambda_cycle=config["lambda_cycle"],
             lambda_identity=config["lambda_identity"],
             gradient_acc_steps=config["gradient_acc_steps"],
             save_location=config["save_location"]

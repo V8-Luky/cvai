@@ -40,9 +40,8 @@ class TrainConfig:
     max_epochs: int = 200
     start_epoch: int = 0
     decay_epoch: int = 100
-    learning_rate: float = 1e-4
-    lambda_a: float = 10.0
-    lambda_b: float = 10.0
+    learning_rate: float = 2e-4
+    lambda_cycle: float = 10.0
     lambda_identity: float = 0.5
     gradient_acc_steps: int = 10
     save_train: bool = True
@@ -154,7 +153,7 @@ class TrainableCycleGAN(L.LightningModule):
         return self(batch["a"], batch["b"])
 
     def configure_optimizers(self):
-        param_groups = (self.model.get_generator_params(), self.model.get_discriminator_a_params(), self.model.get_discriminator_b_params())
+        param_groups = (self.model.get_generator_params(), self.model.get_discriminator_params())
         optimizers = [torch.optim.Adam(params, lr=self.hparams.train_config.learning_rate, betas=(0.5, 0.999)) for params in param_groups]
         lr_schedulers = [torch.optim.lr_scheduler.LambdaLR(optim, lr_lambda=self._new_lr_lambda()) for optim in optimizers]
 
@@ -191,12 +190,13 @@ class TrainableCycleGAN(L.LightningModule):
     def _make_step(self, a, b, stage: str):
         fake_a, fake_b = self(a, b)
 
+        loss_disc_a, loss_disc_b = self._discriminator_loss(a, b, fake_a.detach(), fake_b.detach())
+        discriminator_loss = (loss_disc_a + loss_disc_b) * 0.5
+
         loss_gen_a, loss_gen_b, loss_cycle_a, loss_cycle_b, loss_idt_a, loss_idt_b = (
             self._generator_loss(a, b, fake_a, fake_b)
         )
         generator_loss = loss_gen_a + loss_gen_b + loss_cycle_a + loss_cycle_b + loss_idt_a + loss_idt_b
-        loss_disc_a, loss_disc_b = self._discriminator_loss(a, b, fake_a, fake_b)
-        discriminator_loss = loss_disc_a + loss_disc_b
 
         loss = discriminator_loss + generator_loss
 
@@ -212,7 +212,7 @@ class TrainableCycleGAN(L.LightningModule):
         self.log(f"{stage}_loss_discriminator", discriminator_loss)
         self.log(f"{stage}_loss", loss)
 
-        return fake_a, fake_b, (generator_loss, loss_disc_a, loss_disc_b)
+        return fake_a, fake_b, (generator_loss, discriminator_loss)
 
     def _discriminator_loss(
         self,
@@ -220,7 +220,7 @@ class TrainableCycleGAN(L.LightningModule):
         real_b: torch.Tensor,
         fake_a: torch.Tensor,
         fake_b: torch.Tensor,
-    ) -> torch.Tensor:
+    ) -> tuple[torch.Tensor, torch.Tensor]:
         """
         Computes the total discriminator loss using real and fake samples
         for both domain A and B.
@@ -228,16 +228,16 @@ class TrainableCycleGAN(L.LightningModule):
         :return: Total discriminator loss.
         """
         disc_real_a = self.model.discriminator_a(real_a)
-        disc_fake_a = self.model.discriminator_a(fake_a.detach())
+        disc_fake_a = self.model.discriminator_a(fake_a)
         loss_disc_real_a = self.loss_gan(disc_real_a, torch.ones_like(disc_real_a))
         loss_disc_fake_a = self.loss_gan(disc_fake_a, torch.zeros_like(disc_fake_a))
-        loss_disc_a = (loss_disc_real_a + loss_disc_fake_a) * 0.5
+        loss_disc_a = loss_disc_real_a + loss_disc_fake_a
 
         disc_real_b = self.model.discriminator_b(real_b)
-        disc_fake_b = self.model.discriminator_b(fake_b.detach())
+        disc_fake_b = self.model.discriminator_b(fake_b)
         loss_disc_real_b = self.loss_gan(disc_real_b, torch.ones_like(disc_real_b))
         loss_disc_fake_b = self.loss_gan(disc_fake_b, torch.zeros_like(disc_fake_b))
-        loss_disc_b = (loss_disc_real_b + loss_disc_fake_b) * 0.5
+        loss_disc_b = loss_disc_real_b + loss_disc_fake_b
 
         return loss_disc_a, loss_disc_b
 
@@ -247,7 +247,7 @@ class TrainableCycleGAN(L.LightningModule):
         real_b: torch.Tensor,
         fake_a: torch.Tensor,
         fake_b: torch.Tensor,
-    ) -> torch.Tensor:
+    ) -> tuple[torch.Tensor, ...]:
         """
         Computes the total generator loss including adversarial, cycle consistency,
         and optional identity loss.
@@ -255,8 +255,7 @@ class TrainableCycleGAN(L.LightningModule):
         :return: Total generator loss.
         """
         lambda_idt = self.hparams.train_config.lambda_identity
-        lambda_a = self.hparams.train_config.lambda_a
-        lambda_b = self.hparams.train_config.lambda_b
+        lambda_cycle = self.hparams.train_config.lambda_cycle
 
         disc_a = self.model.discriminator_a(fake_a)
         disc_b = self.model.discriminator_b(fake_b)
@@ -265,20 +264,12 @@ class TrainableCycleGAN(L.LightningModule):
 
         rec_a = self.model.generator_b_to_a(fake_b)
         rec_b = self.model.generator_a_to_b(fake_a)
-        loss_cycle_a = self.loss_cycle(rec_a, real_a) * lambda_a
-        loss_cycle_b = self.loss_cycle(rec_b, real_b) * lambda_b
+        loss_cycle_a = self.loss_cycle(rec_a, real_a) * lambda_cycle
+        loss_cycle_b = self.loss_cycle(rec_b, real_b) * lambda_cycle
 
         if lambda_idt > 0.0:
-            loss_idt_a = (
-                self.loss_identity(self.model.generator_b_to_a(real_a), real_a)
-                * lambda_idt
-                * lambda_a
-            )
-            loss_idt_b = (
-                self.loss_identity(self.model.generator_a_to_b(real_b), real_b)
-                * lambda_idt
-                * lambda_b
-            )
+            loss_idt_a = self.loss_identity(self.model.generator_b_to_a(real_a), real_a) * lambda_idt
+            loss_idt_b = self.loss_identity(self.model.generator_a_to_b(real_b), real_b) * lambda_idt
         else:
             loss_idt_a = 0
             loss_idt_b = 0
