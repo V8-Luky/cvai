@@ -105,8 +105,8 @@ class Training:
             ModelCheckpoint(
                 monitor="epoch", filename="latest-{epoch:02d}", save_top_k=1, mode="max"
             ),
-            EarlyStopping(monitor="valid_loss", patience=5, mode="min"),
-            EarlyStopping(monitor="train_loss", patience=5, mode="min"),
+            EarlyStopping(monitor="valid_loss", patience=50, mode="min"),
+            EarlyStopping(monitor="train_loss", patience=50, mode="min"),
         ]
 
 
