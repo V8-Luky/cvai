@@ -19,7 +19,7 @@ class ResidualGenerator(nn.Module):
     :param n_blocks: Number of residual blocks used in the network.
     :param sampling_steps: Number of downsampling and upsampling layers.
     """
-    def __init__(self, in_channels=3, channels=64, n_blocks=9, sampling_steps=2):
+    def __init__(self, in_channels=3, channels=64, n_blocks=6, sampling_steps=2):
         super().__init__()
         layers = [
             nn.Conv2d(in_channels, channels, kernel_size=7, padding=3, stride=1, padding_mode="reflect"),

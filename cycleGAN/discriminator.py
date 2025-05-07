@@ -26,7 +26,7 @@ class PatchBlock(nn.Module):
                 padding_mode="reflect"
             ),
             nn.InstanceNorm2d(out_channels),
-            nn.LeakyReLU(0.2)
+            nn.LeakyReLU(0.2, inplace=True),
         )
 
     def forward(self, x):
@@ -55,7 +55,7 @@ class PatchGanDiscriminator(nn.Module):
 
         layers = [
             nn.Conv2d(in_channels, channels, kernel_size=4, stride=2, padding=1, padding_mode="reflect"),
-            nn.LeakyReLU(0.2)
+            nn.LeakyReLU(0.2, inplace=True)
         ]
 
         layers.extend(
