@@ -156,6 +156,7 @@ class TrainableCycleGAN(L.LightningModule):
             return
 
         self.model = CycleGAN(self.hparams.model_config)
+        self.model.apply(self.model.init_weights)
 
     def save_images(
         self,

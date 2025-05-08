@@ -100,3 +100,10 @@ class CycleGAN(nn.Module):
         """
         yield from self.get_discriminator_a_params()
         yield from self.get_discriminator_b_params()
+
+    @staticmethod
+    def init_weights(m):
+        if isinstance(m, nn.Linear | nn.Conv2d | nn.ConvTranspose2d):
+            nn.init.normal_(m.weight, mean=0.0, std=0.02)
+            if m.bias is not None:
+                nn.init.zeros_(m.bias)
