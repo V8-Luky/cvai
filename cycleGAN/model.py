@@ -55,10 +55,6 @@ class CycleGAN(nn.Module):
             in_channels=3, channels=config.disc_channels, **config.disc_kwargs
         )
 
-        self.loss_gan = nn.MSELoss()
-        self.loss_cycle = nn.L1Loss()
-        self.loss_identity = nn.L1Loss()
-
     def forward(
         self, a: torch.Tensor, b: torch.Tensor
     ) -> tuple[torch.Tensor, torch.Tensor]:

@@ -17,6 +17,7 @@ from torchvision.utils import save_image
 
 from dataclasses import dataclass
 from .model import CycleGAN, CycleGANConfig
+from .util import ImagePool
 
 
 @dataclass
@@ -108,6 +109,9 @@ class TrainableCycleGAN(L.LightningModule):
         self.loss_cycle = nn.L1Loss()
         self.loss_identity = nn.L1Loss()
 
+        self.fake_A_pool = ImagePool(50)
+        self.fake_B_pool = ImagePool(50)
+
         self.automatic_optimization = False
 
         storage_path = Path(self._storage_folder())
@@ -141,7 +145,7 @@ class TrainableCycleGAN(L.LightningModule):
         return self(batch["a"], batch["b"])
 
     def configure_optimizers(self):
-        param_groups = (self.model.get_discriminator_params(), self.model.get_generator_params())
+        param_groups = (self.model.get_generator_params(), self.model.get_discriminator_params())
         optimizers = [torch.optim.Adam(params, lr=self.hparams.train_config.learning_rate, betas=(0.5, 0.999)) for params in param_groups]
         lr_schedulers = [torch.optim.lr_scheduler.LambdaLR(optim, lr_lambda=self._new_lr_lambda()) for optim in optimizers]
 
@@ -180,15 +184,6 @@ class TrainableCycleGAN(L.LightningModule):
 
         fake_a, fake_b = self(a, b)
 
-        loss_disc_a, loss_disc_b = self._discriminator_loss(a, b, fake_a.detach(), fake_b.detach())
-        discriminator_loss = (loss_disc_a + loss_disc_b) * 0.5
-
-        if stage == "train":
-            optimizer = next(optimizers)
-            optimizer.zero_grad()
-            self.manual_backward(discriminator_loss)
-            optimizer.step()
-
         loss_gen_a, loss_gen_b, loss_cycle_a, loss_cycle_b, loss_idt_a, loss_idt_b = (
             self._generator_loss(a, b, fake_a, fake_b)
         )
@@ -198,6 +193,15 @@ class TrainableCycleGAN(L.LightningModule):
             optimizer = next(optimizers)
             optimizer.zero_grad()
             self.manual_backward(generator_loss)
+            optimizer.step()
+
+        loss_disc_a, loss_disc_b = self._discriminator_loss(a, b, fake_a.detach(), fake_b.detach())
+        discriminator_loss = (loss_disc_a + loss_disc_b) * 0.5
+
+        if stage == "train":
+            optimizer = next(optimizers)
+            optimizer.zero_grad()
+            self.manual_backward(discriminator_loss)
             optimizer.step()
 
         loss = discriminator_loss + generator_loss
@@ -231,6 +235,9 @@ class TrainableCycleGAN(L.LightningModule):
 
         :return: Total discriminator loss.
         """
+        fake_a = self.fake_A_pool.query(fake_a)
+        fake_b = self.fake_B_pool.query(fake_b)
+
         disc_real_a = self.model.discriminator_a(real_a)
         disc_fake_a = self.model.discriminator_a(fake_a)
         loss_disc_real_a = self.loss_gan(disc_real_a, torch.ones_like(disc_real_a))
