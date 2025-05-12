@@ -55,10 +55,6 @@ class CycleGAN(nn.Module):
             in_channels=3, channels=config.disc_channels, **config.disc_kwargs
         )
 
-        self.loss_gan = nn.MSELoss()
-        self.loss_cycle = nn.L1Loss()
-        self.loss_identity = nn.L1Loss()
-
     def forward(
         self, a: torch.Tensor, b: torch.Tensor
     ) -> tuple[torch.Tensor, torch.Tensor]:
@@ -104,3 +100,10 @@ class CycleGAN(nn.Module):
         """
         yield from self.get_discriminator_a_params()
         yield from self.get_discriminator_b_params()
+
+    @staticmethod
+    def init_weights(m):
+        if isinstance(m, nn.Linear | nn.Conv2d | nn.ConvTranspose2d):
+            nn.init.normal_(m.weight, mean=0.0, std=0.02)
+            if m.bias is not None:
+                nn.init.zeros_(m.bias)

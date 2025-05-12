@@ -75,7 +75,7 @@ class Training:
             devices="auto",
             max_epochs=self.model.hparams.train_config.max_epochs,
             logger=logger,
-            log_every_n_steps=100,
+            log_every_n_steps=20,
             callbacks=self.callbacks,
             precision="16-mixed",
         )
@@ -105,8 +105,8 @@ class Training:
             ModelCheckpoint(
                 monitor="epoch", filename="latest-{epoch:02d}", save_top_k=1, mode="max"
             ),
-            EarlyStopping(monitor="valid_loss", patience=5, mode="min"),
-            EarlyStopping(monitor="train_loss", patience=5, mode="min"),
+            EarlyStopping(monitor="valid_loss", patience=50, mode="min"),
+            EarlyStopping(monitor="train_loss", patience=50, mode="min"),
         ]
 
 
@@ -174,7 +174,6 @@ class Sweep:
             learning_rate=config["learning_rate"],
             lambda_cycle=config["lambda_cycle"],
             lambda_identity=config["lambda_identity"],
-            gradient_acc_steps=config["gradient_acc_steps"],
             save_location=config["save_location"]
         )
 

@@ -17,6 +17,7 @@ from torchvision.utils import save_image
 
 from dataclasses import dataclass
 from .model import CycleGAN, CycleGANConfig
+from .util import ImagePool
 
 
 @dataclass
@@ -29,10 +30,8 @@ class TrainConfig:
         start_epoch (int): Starting epoch for training
         decay_epoch (int): Epoch at which to start learning rate decay
         learning_rate (float): Initial learning rate for the optimizer
-        lambda_a (float): Weight for cycle consistency loss in domain A
-        lambda_b (float): Weight for cycle consistency loss in domain B
+        lambda_cycle (float): Weight for cycle consistency loss
         lambda_identity (float): Weight for identity loss
-        gradient_acc_steps (int): Amount of steps to accumulate gradients for
         save_train (bool): Save the first image paris of the first batch per epoch for the train set
         save_valid (bool): Save the first image paris of the first batch per epoch for the valid set
         save_location (str): Storage location for saved images
@@ -43,7 +42,6 @@ class TrainConfig:
     learning_rate: float = 2e-4
     lambda_cycle: float = 10.0
     lambda_identity: float = 0.5
-    gradient_acc_steps: int = 10
     save_train: bool = True
     save_valid: bool = False
     save_location: str = "./gan_images"
@@ -111,6 +109,9 @@ class TrainableCycleGAN(L.LightningModule):
         self.loss_cycle = nn.L1Loss()
         self.loss_identity = nn.L1Loss()
 
+        self.fake_A_pool = ImagePool(50)
+        self.fake_B_pool = ImagePool(50)
+
         self.automatic_optimization = False
 
         storage_path = Path(self._storage_folder())
@@ -122,16 +123,7 @@ class TrainableCycleGAN(L.LightningModule):
     def training_step(self, batch, batch_idx):
         fake_a, fake_b, losses = self._make_step(batch["a"], batch["b"], "train")
 
-        optimizers = self.optimizers()
-        for loss, optimizer in zip(losses, optimizers):
-            loss /= self.hparams.train_config.gradient_acc_steps
-            self.manual_backward(loss)
-            if (batch_idx + 1) % self.hparams.train_config.gradient_acc_steps == 0 or self.trainer.is_last_batch:
-                #self.clip_gradients(optimizer, gradient_clip_val=0.5, gradient_clip_algorithm="norm")
-                optimizer.step()
-                optimizer.zero_grad()
-
-        if self.hparams.train_config.save_train and batch_idx == 0:
+        if self.hparams.train_config.save_train and self.trainer.is_last_batch:
             self.save_images(batch["a"], batch["b"], fake_a, fake_b, "train")
 
     def on_train_epoch_end(self):
@@ -164,6 +156,7 @@ class TrainableCycleGAN(L.LightningModule):
             return
 
         self.model = CycleGAN(self.hparams.model_config)
+        self.model.apply(self.model.init_weights)
 
     def save_images(
         self,
@@ -188,29 +181,45 @@ class TrainableCycleGAN(L.LightningModule):
                 save_image(tensor[i] * 0.5 + 0.5, f"{path}_{i}.jpg")
 
     def _make_step(self, a, b, stage: str):
-        fake_a, fake_b = self(a, b)
+        optimizers = iter(self.optimizers())
 
-        loss_disc_a, loss_disc_b = self._discriminator_loss(a, b, fake_a.detach(), fake_b.detach())
-        discriminator_loss = (loss_disc_a + loss_disc_b) * 0.5
+        fake_a, fake_b = self(a, b)
 
         loss_gen_a, loss_gen_b, loss_cycle_a, loss_cycle_b, loss_idt_a, loss_idt_b = (
             self._generator_loss(a, b, fake_a, fake_b)
         )
         generator_loss = loss_gen_a + loss_gen_b + loss_cycle_a + loss_cycle_b + loss_idt_a + loss_idt_b
 
+        if stage == "train":
+            optimizer = next(optimizers)
+            optimizer.zero_grad()
+            self.manual_backward(generator_loss)
+            optimizer.step()
+
+        loss_disc_a, loss_disc_b = self._discriminator_loss(a, b, fake_a.detach(), fake_b.detach())
+        discriminator_loss = (loss_disc_a + loss_disc_b) * 0.5
+
+        if stage == "train":
+            optimizer = next(optimizers)
+            optimizer.zero_grad()
+            self.manual_backward(discriminator_loss)
+            optimizer.step()
+
         loss = discriminator_loss + generator_loss
 
-        self.log(f"{stage}_loss_gen_a", loss_gen_a)
-        self.log(f"{stage}_loss_gen_b", loss_gen_b)
-        self.log(f"{stage}_loss_cycle_a", loss_cycle_a)
-        self.log(f"{stage}_loss_cycle_b", loss_cycle_b)
-        self.log(f"{stage}_loss_idt_a", loss_idt_a)
-        self.log(f"{stage}_loss_idt_b", loss_idt_b)
-        self.log(f"{stage}_loss_disc_a", loss_disc_a)
-        self.log(f"{stage}_loss_disc_b", loss_disc_b)
-        self.log(f"{stage}_loss_generator", generator_loss)
-        self.log(f"{stage}_loss_discriminator", discriminator_loss)
-        self.log(f"{stage}_loss", loss)
+        self.log_dict({
+            f"{stage}_loss_gen_a": loss_gen_a,
+            f"{stage}_loss_gen_b": loss_gen_b,
+            f"{stage}_loss_cycle_a": loss_cycle_a,
+            f"{stage}_loss_cycle_b": loss_cycle_b,
+            f"{stage}_loss_idt_a": loss_idt_a,
+            f"{stage}_loss_idt_b": loss_idt_b,
+            f"{stage}_loss_disc_a": loss_disc_a,
+            f"{stage}_loss_disc_b": loss_disc_b,
+            f"{stage}_loss_generator": generator_loss,
+            f"{stage}_loss_discriminator": discriminator_loss,
+            f"{stage}_loss": loss,
+        })
 
         return fake_a, fake_b, (generator_loss, discriminator_loss)
 
@@ -227,6 +236,9 @@ class TrainableCycleGAN(L.LightningModule):
 
         :return: Total discriminator loss.
         """
+        fake_a = self.fake_A_pool.query(fake_a)
+        fake_b = self.fake_B_pool.query(fake_b)
+
         disc_real_a = self.model.discriminator_a(real_a)
         disc_fake_a = self.model.discriminator_a(fake_a)
         loss_disc_real_a = self.loss_gan(disc_real_a, torch.ones_like(disc_real_a))
