@@ -116,6 +116,7 @@ class TrainableCycleGAN(L.LightningModule):
 
         storage_path = Path(self._storage_folder())
         storage_path.mkdir(parents=True, exist_ok=True)
+        self.image_index = 0
 
     def forward(self, a, b):
         return self.model(a, b)
@@ -174,11 +175,12 @@ class TrainableCycleGAN(L.LightningModule):
         self.save_image(fake_b.detach().cpu(), dataset, "fake_b", save_all)
 
     def save_image(self, tensor: torch.Tensor, dataset: str, name: str, save_all: bool):
-        path = f"{self._storage_folder()}/{dataset}-ep{self.trainer.current_epoch}_{name}"
+        path = f"{self._storage_folder()}/{dataset}-ep{self.trainer.current_epoch}-{self.image_index}_{name}"
         save_image(tensor[0] * 0.5 + 0.5, f"{path}.jpg")
         if save_all:
             for i in range(1, len(tensor)):
                 save_image(tensor[i] * 0.5 + 0.5, f"{path}_{i}.jpg")
+        self.image_index += 1
 
     def _make_step(self, a, b, stage: str):
         optimizers = iter(self.optimizers())
